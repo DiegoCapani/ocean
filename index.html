@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Disperso in Mare - Survival Audio Edition</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        body {
+            background-color: #0b1d28;
+            color: #e0f2fe;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+        }
+
+        #game-container {
+            width: 100%;
+            max-width: 600px;
+            background-color: #152e3d;
+            border: 3px solid #facc15;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        header {
+            text-align: center;
+            border-bottom: 2px solid #334155;
+            padding-bottom: 10px;
+        }
+
+        h1 {
+            color: #facc15;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        #weather-banner {
+            background-color: #1e293b;
+            color: #38bdf8;
+            padding: 6px;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        #status-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .status-item {
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .critical {
+            color: #ef4444;
+            font-weight: bold;
+            animation: blink 1s infinite;
+        }
+
+        #log-panel {
+            height: 180px;
+            background-color: #020617;
+            border-left: 4px solid #facc15;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .log-entry {
+            border-bottom: 1px solid #1e293b;
+            padding-bottom: 4px;
+        }
+        .log-good { color: #4ade80; }
+        .log-bad { color: #f87171; }
+        .log-system { color: #38bdf8; }
+
+        #actions-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        button {
+            background-color: #1e3a8a;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s;
+            touch-action: manipulation;
+        }
+
+        button:hover {
+            background-color: #2563eb;
+        }
+
+        button:disabled {
+            background-color: #334155;
+            color: #64748b;
+            cursor: not-allowed;
+        }
+
+        /* Banner per sbloccare l'audio sui browser moderni */
+        #audio-prompt {
+            background: #facc15;
+            color: #000;
+            padding: 10px;
+            text-align: center;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        @keyframes blink {
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <header>
+        <h1>ZATTERA: GIORNO <span id="day-count">1</span></h1>
+        <div id="weather-banner">Meteo: Calma Piatta</div>
+    </header>
+
+    <!-- Pulsante per attivazione audio obbligatorio per i browser -->
+    <div id="audio-prompt" onclick="game.initAudio()">🔊 CLICCA QUI PER ATTIVARE L'AUDIO DI SOTTOFONDO</div>
+
+    <div id="status-grid">
+        <div class="status-item">Salute: <span id="stat-health">100</span>%</div>
+        <div class="status-item">Idratazione: <span id="stat-water-level">100</span>%</div>
+        <div class="status-item">Fame: <span id="stat-food-level">100</span>%</div>
+        <div class="status-item">Integrità Zattera: <span id="stat-raft">100</span>%</div>
+        <div class="status-item" style="grid-column: span 2; color: #facc15; border-top: 1px solid #334155; padding-top: 5px;">
+            Scorte: <span id="inv-water">10</span> Raz. Acqua | <span id="inv-food">14</span> Raz. Cibo
+        </div>
+    </div>
+
+    <div id="log-panel">
+        <div class="log-entry log-system">Giorno 1: La nave è affondata. Sei a bordo della zattera gonfiabile gialla. Il mare ti circonda.</div>
+    </div>
+
+    <div id="actions-panel">
+        <button onclick="game.actionFish()">Pesca con Lenza</button>
+        <button onclick="game.actionCollectWater()">Raccogli Piovana</button>
+        <button onclick="game.actionEat()">Consuma Cibo</button>
+        <button onclick="game.actionDrink()">Consuma Acqua</button>
+        <button onclick="game.actionUseKit()">Riparazione Zattera</button>
+        <button onclick="game.actionSignal()">Razzo Segnalazione</button>
+        <button onclick="game.nextTurn()" style="grid-column: span 2; background-color: #facc15; color: #000;">RIPOSATI / FA COMINCIARE IL GIORNO DOPO</button>
+    </div>
+</div>
+
+<script>
+class RaftSurvival {
+    constructor() {
+        this.gameState = {
+            day: 1,
+            health: 100,
+            waterLevel: 100,
+            foodLevel: 100,
+            raftIntegrity: 100,
+            weather: 'calma', // calma, mare_mosso, pioggia, tempesta
+            inventory: { waterRations: 10, foodRations: 14, flares: 3 },
+            gameOver: false
+        };
+
+        // Istanze Audio
+        this.audioCtx = null;
+        this.seaNode = null;
+        this.rainNode = null;
+    }
+
+    init() {
+        this.updateUI();
+    }
+
+    // --- MOTORE AUDIO PROCEDURALE (Sintesi nativa) ---
+    initAudio() {
+        if (this.audioCtx) return; // Già inizializzato
+
+        // I browser richiedono un'interazione utente prima di riprodurre suoni
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        
+        // Nascondi il banner dell'audio una volta cliccato
+        document.getElementById('audio-prompt').style.display = 'none';
+
+        // 1. Genera il Mare di Sottofondo (Pink Noise filtrato a bassa frequenza con oscillatore lento)
+        this.seaNode = this.createNoiseNode(0.04); // Volume basso
+        const seaFilter = this.audioCtx.createBiquadFilter();
+        seaFilter.type = 'lowpass';
+        seaFilter.frequency.setValueAtTime(300, this.audioCtx.currentTime);
+        
+        // Modulatore per simulare il rollio delle onde (va su e giù nel tempo)
+        const waveOsc = this.audioCtx.createOscillator();
+        const waveGain = this.audioCtx.createGain();
+        waveOsc.frequency.setValueAtTime(0.12, this.audioCtx.currentTime); // Onde lente (0.12 Hz)
+        waveGain.gain.setValueAtTime(120, this.audioCtx.currentTime); // Intensità oscillazione filtro
+        
+        waveOsc.connect(waveGain);
+        waveGain.connect(seaFilter.frequency);
+        waveOsc.start();
+
+        this.seaNode.connect(seaFilter);
+        seaFilter.connect(this.audioCtx.destination);
+
+        // 2. Generatore Pioggia (Pink noise ad alta frequenza, muto di default)
+        this.rainNode = this.createNoiseNode(0); 
+        this.rainFilter = this.audioCtx.createBiquadFilter();
+        this.rainFilter.type = 'bandpass';
+        this.rainFilter.frequency.setValueAtTime(1200, this.audioCtx.currentTime);
+        this.rainNode.connect(this.rainFilter);
+        this.rainFilter.connect(this.audioCtx.destination);
+
+        this.log("Audio di sottofondo attivato correttamente.", "log-system");
+        this.updateAudioEnvironment();
+    }
+
+    // Funzione di supporto per generare rumore (Pink/White misto)
+    createNoiseNode(initialVolume) {
+        const bufferSize = 2 * this.audioCtx.sampleRate;
+        const noiseBuffer = this.audioCtx.createBuffer(1, bufferSize, this.audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        
+        let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+            const white = Math.random() * 2 - 1;
+            // Algoritmo per generare Pink Noise (più cupo e naturale rispetto al White)
+            b0 = 0.99886 * b0 + white * 0.0555179;
+            b1 = 0.99332 * b1 + white * 0.0750759;
+            b2 = 0.96900 * b2 + white * 0.1538520;
+            b3 = 0.86650 * b3 + white * 0.3104856;
+            b4 = 0.55000 * b4 + white * 0.5329522;
+            b5 = -0.7616 * b5 - white * 0.0168980;
+            output[i] = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362;
+            output[i] *= 0.11; 
+            b6 = white * 0.115926;
+        }
+
+        const noise = this.audioCtx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        noise.loop = true;
+
+        const gainNode = this.audioCtx.createGain();
+        gainNode.gain.setValueAtTime(initialVolume, this.audioCtx.currentTime);
+        
+        noise.connect(gainNode);
+        noise.gainNode = gainNode; // Riferimento per cambiare volume dinamicamente
+        noise.start();
+        return noise;
+    }
+
+    // Regola i suoni ambientali in base al meteo
+    updateAudioEnvironment() {
+        if (!this.audioCtx) return;
+
+        const now = this.audioCtx.currentTime;
+        switch(this.gameState.weather) {
+            case 'calma':
+                this.seaNode.gainNode.gain.linearRampToValueAtTime(0.04, now + 2);
+                this.rainNode.gainNode.gain.linearRampToValueAtTime(0, now + 2);
+                break;
+            case 'mare_mosso':
+                this.seaNode.gainNode.gain.linearRampToValueAtTime(0.12, now + 2);
+                this.rainNode.gainNode.gain.linearRampToValueAtTime(0, now + 2);
+                break;
+            case 'pioggia':
+                this.seaNode.gainNode.gain.linearRampToValueAtTime(0.06, now + 2);
+                this.rainNode.gainNode.gain.linearRampToValueAtTime(0.08, now + 2); // Attiva pioggia
+                break;
+            case 'tempesta':
+                this.seaNode.gainNode.gain.linearRampToValueAtTime(0.2, now + 2); // Mare forte
+                this.rainNode.gainNode.gain.linearRampToValueAtTime(0.15, now + 2); // Pioggia battente
+                this.playThunderEffect(); // Lancia un tuono improvviso
+                break;
+        }
+    }
+
+    // --- EFFETTI SONORI PROCEDURALI (One-shot) ---
+
+    // Suono Sintetico della Pesca (un "fischio" ascendente e un "splash")
+    playFishSound() {
+        if (!this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(150, now + 0.4); // Lenza lanciata
+        
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.4);
+        
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start();
+        osc.stop(now + 0.4);
+    }
+
+    // Suono di un Sorso d'acqua o cibo consumato
+    playEatDrinkSound() {
+        if (!this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+        const osc = this.audioCtx.createOscillator();
+        const gain = this.audioCtx.createGain();
+        
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(150, now);
+        osc.frequency.exponentialRampToValueAtTime(300, now + 0.15);
+        
+        gain.gain.setValueAtTime(0.15, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.15);
+        
+        osc.connect(gain);
+        gain.connect(this.audioCtx.destination);
+        osc.start();
+        osc.stop(now + 0.15);
+    }
+
+    // Effetto Tuono (Esplosione di rumore filtrato a bassissima frequenza)
+    playThunderEffect() {
+        if (!this.audioCtx) return;
+        const now = this.audioCtx.currentTime;
+        const thunder = this.createNoiseNode(0);
+        const filter = this.audioCtx.createBiquadFilter();
+        
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(80, now);
+        
+        thunder.gainNode.gain.setValueAtTime(0.4, now);
+        thunder.gainNode.gain.exponentialRampToValueAtTime(0.01, now + 2.5); // Decadimento lungo
+        
+        thunder.disconnect();
+        thunder.connect(filter);
+        filter.connect(this.audioCtx.destination);
+        
+        setTimeout(() => { thunder.stop(); }, 3000);
+    }
+
+
+    // --- MECCANICHE DI GIOCO ---
+
+    updateUI() {
+        document.getElementById('day-count').innerText = this.gameState.day;
+        document.getElementById('stat-health').innerText = this.gameState.health;
+        document.getElementById('stat-water-level').innerText = this.gameState.waterLevel;
+        document.getElementById('stat-food-level').innerText = this.gameState.foodLevel;
+        document.getElementById('stat-raft').innerText = this.gameState.raftIntegrity;
+        
+        document.getElementById('inv-water').innerText = this.gameState.inventory.waterRations;
+        document.getElementById('inv-food').innerText = this.gameState.inventory.foodRations;
+
+        // Visualizzazione testo del Meteo
+        const weatherBanner = document.getElementById('weather-banner');
+        const weatherTexts = {
+            calma: "Meteo: Mare Calmo ☀️",
+            mare_mosso: "Meteo: Mare Mosso 🌊",
+            pioggia: "Meteo: Pioggia Debole 🌧️",
+            tempesta: "Meteo: TEMPESTA ⛈️"
+        };
+        weatherBanner.innerText = weatherTexts[this.gameState.weather];
+        
+        // Colore dinamico del banner meteo
+        if(this.gameState.weather === 'tempesta') weatherBanner.style.backgroundColor = '#7f1d1d';
+        else if(this.gameState.weather === 'pioggia') weatherBanner.style.backgroundColor = '#1e3a8a';
+        else weatherBanner.style.backgroundColor = '#1e293b';
+
+        if (this.gameState.gameOver) {
+            const buttons = document.querySelectorAll('button');
+            buttons.forEach(btn => btn.disabled = true);
+        }
+    }
+
+    actionEat() {
+        if (this.gameState.inventory.foodRations > 0) {
+            this.gameState.inventory.foodRations--;
+            this.gameState.foodLevel = Math.min(100, this.gameState.foodLevel + 35);
+            this.log("Mangi una razione. La fame cala.", "log-good");
+            this.playEatDrinkSound();
+            this.updateUI();
+        }
+    }
+
+    actionDrink() {
+        if (this.gameState.inventory.waterRations > 0) {
+            this.gameState.inventory.waterRations--;
+            this.gameState.waterLevel = Math.min(100, this.gameState.waterLevel + 40);
+            this.log("Bevi dell'acqua pulita.", "log-good");
+            this.playEatDrinkSound();
+            this.updateUI();
+        }
+    }
+
+    actionFish() {
+        this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 5);
+        this.playFishSound();
+
+        // Se il mare è in tempesta pescare è quasi impossibile e pericoloso
+        if(this.gameState.weather === 'tempesta') {
+            this.log("Il mare è troppo violento! Non riesci a tenere la lenza e rischi di cadere.", "log-bad");
+            this.updateUI();
+            return;
+        }
+
+        const bonus = this.gameState.weather === 'mare_mosso' ? 0.2 : 0; // I pesci abboccano di più con mare mosso
+        if (Math.random() + bonus > 0.5) {
+            this.gameState.inventory.foodRations += 1;
+            this.log("Hai preso un pesce! +1 Razione Cibo.", "log-good");
+        } else {
+            this.log("Nessun pesce ha abboccato.", "log-bad");
+        }
+        this.updateUI();
+    }
+
+    actionCollectWater() {
+        this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 5);
+        
+        // La raccolta acqua dipende drasticamente dal meteo attuale
+        if (this.gameState.weather === 'pioggia' || this.gameState.weather === 'tempesta') {
+            this.gameState.inventory.waterRations += 2;
+            this.log("Piove! I teli di raccolta si riempiono rapidamente. +2 Razioni Acqua.", "log-good");
+        } else {
+            if (Math.random() > 0.8) {
+                this.gameState.inventory.waterRations += 1;
+                this.log("Raccogli un velo di condensa mattutina. +1 Razione Acqua.", "log-good");
+            } else {
+                this.log("Cielo limpido. Nessuna traccia di acqua dolce.", "log-bad");
+            }
+        }
+        this.updateUI();
+    }
+
+    actionUseKit() {
+        if (this.gameState.raftIntegrity < 100) {
+            this.gameState.raftIntegrity = Math.min(100, this.gameState.raftIntegrity + 25);
+            this.log("Riapplichi il nastro sigillante sulle giunzioni della zattera.", "log-good");
+            this.updateUI();
+        }
+    }
+
+    actionSignal() {
+        if (this.gameState.inventory.flares > 0) {
+            this.gameState.inventory.flares--;
+            if (this.gameState.weather === 'tempesta') {
+                this.log("Sparas il razzo, ma la fitta nebbia della tempesta lo rende invisibile.", "log-bad");
+            } else if (Math.random() > 0.85) {
+                this.log("UNA NAVE CARGO TI HA AVISTATO! SEI SALVO!", "log-good");
+                this.gameState.gameOver = true;
+            } else {
+                this.log("Il razzo illumina il cielo vuoto. Nessuno risponde.", "log-bad");
+            }
+            this.updateUI();
+        }
+    }
+
+    // --- CAMBIO TURNO E NUOVO METEO ---
+    nextTurn() {
+        if (this.gameState.gameOver) return;
+
+        // Consumi base
+        this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 20);
+        this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 25);
+
+        if (this.gameState.foodLevel === 0) this.gameState.health -= 15;
+        if (this.gameState.waterLevel === 0) this.gameState.health -= 25;
+
+        // Calcolo Danni in base al meteo passato nella notte
+        if (this.gameState.weather === 'tempesta') {
+            this.gameState.raftIntegrity = Math.max(0, this.gameState.raftIntegrity - 25);
+            this.gameState.health = Math.max(0, this.gameState.health - 10);
+            this.log("La tempesta notturna ha flagellato la zattera e ferito il tuo corpo.", "log-bad");
+        } else if (this.gameState.weather === 'mare_mosso') {
+            this.gameState.raftIntegrity = Math.max(0, this.gameState.raftIntegrity - 10);
+        }
+
+        // Cambio Meteo per il nuovo giorno
+        const meteoChances = ['calma', 'calma', 'mare_mosso', 'pioggia', 'tempesta'];
+        this.gameState.weather = meteoChances[Math.floor(Math.random() * meteoChances.length)];
+        
+        // Aggiorna l'ambiente audio con i nuovi parametri meteo
+        this.updateAudioEnvironment();
+
+        // Controllo Morti
+        if (this.gameState.raftIntegrity <= 0 || this.gameState.health <= 0) {
+            this.log("Sei svanito nell'oceano. GAME OVER.", "log-bad");
+            this.gameState.gameOver = true;
+            this.updateUI();
+            return;
+        }
+
+        this.gameState.day++;
+        this.log(`--- Sorge il sole. Giorno ${this.gameState.day} ---`, "log-system");
+        this.updateUI();
+    }
+}
+
+const game = new RaftSurvival();
+window.onload = () => game.init();
+</script>
+</body>
+</html>
