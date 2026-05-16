@@ -252,7 +252,7 @@
 
     <!-- Diario di Bordo -->
     <div id="log-panel">
-        <div class="log-entry log-system">SISTEMA: Fix logico applicato. Il distillatore solare richiede luce diurna. Di notte si usa il telo per la condensa.</div>
+        <div class="log-entry log-system">SISTEMA: Distillatore solare rimosso. Sistema di raccolta rimodulato: solo Acqua Piovana o Rugiada da Condensa tramite telo.</div>
     </div>
 
     <!-- Pannello di Controllo Azioni -->
@@ -529,7 +529,7 @@ class IdleRealTimeSurvival {
         this.updateUI();
     }
 
-    // --- LOGICA AGGIORNATA: RACCOLTA DIFFERENZIATA GIORNO/NOTTE/METEO ---
+    // --- LOGICA AGGIORNATA: SOLO ACQUA PIOVANA O TELO DELLA RUGIADA ---
     actionCollectWater() {
         if(this.gameState.isFloatingInWater) return;
         if (this.gameState.inventory.waterRations >= 20) {
@@ -540,8 +540,9 @@ class IdleRealTimeSurvival {
         const meteoCorrente = this.gameState.currentWeather;
         const faseCorrente = this.gameState.phase;
 
-        // Caso 1: Sta piovendo (Giorno o Notte indifferente) -> Raccogli acqua piovana
+        // Caso 1: Condizioni di pioggia -> Raccolta Acqua Piovana
         if (meteoCorrente === 'pioggia' || meteoCorrente === 'tempesta') {
+            // Sforzo minimo, i contenitori si riempiono da soli esposti all'aria
             this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 1);
             this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 1);
 
@@ -554,27 +555,27 @@ class IdleRealTimeSurvival {
                 this.log("Il forte vento flessibile ha rovesciato i contenitori di acqua piovana.", "log-system");
             }
         } 
-        // Caso 2: Non piove -> Dipende dall'orario (Giorno vs Notte)
+        // Caso 2: Cielo Sereno o Torrido -> Raccolta Rugiada (Condensa sul telo)
         else {
-            // Consumo fisso di risorse per l'azione di raccolta/allestimento
+            // Maggior dispendio di energie per installare, monitorare e strizzare il telo manualmente
             this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 4);
             this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 4);
 
             if (faseCorrente === 'SERA' || faseCorrente === 'NOTTE') {
-                // DI NOTTE: Raccolta umidità con il telo
-                if (Math.random() < 0.20) { // Probabilità inferiore alla pioggia e al distillatore diurno
+                // Di notte la rugiada aumenta per via dell'escursione termica (25% di successo)
+                if (Math.random() < 0.25) {
                     this.gameState.inventory.waterRations++;
-                    this.log("🌙 Raccolta CONDENSA NOTTURNA riuscita stendendo il telo sulla struttura.", "log-good");
+                    this.log("🌙 TELO DELLA RUGIADA: Raccolta riuscita! L'escursione termica notturna ha generato condensa.", "log-good");
                 } else {
-                    this.log("Tentativo notturno a vuoto: l'escursione termica non ha generato abbastanza rugiada sul telo.", "log-system");
+                    this.log("Tentativo notturno a vuoto: l'umidità dell'aria è troppo bassa per generare abbastanza rugiada sul telo.", "log-system");
                 }
             } else {
-                // DI GIORNO: Funziona il distillatore solare
-                if (Math.random() < 0.35) {
+                // Di giorno il sole asciuga la condensa rapidamente, rendendo il lavoro molto meno efficiente (15% di successo)
+                if (Math.random() < 0.15) {
                     this.gameState.inventory.waterRations++;
-                    this.log("🧪 DISTILLATORE SOLARE funzionante! Il calore diurno ha evaporato l'acqua marina.", "log-good");
+                    this.log("☀️ TELO DELLA RUGIADA: Sei riuscito a raccogliere un velo di condensa diurna prima che evaporasse.", "log-good");
                 } else {
-                    this.log("Il distillatore solare ha prodotto troppo poco, l'umidità è evaporata nell'aria.", "log-system");
+                    this.log("Tentativo diurno a vuoto: il caldo asciuga il telo prima che la condensa si accumuli.", "log-system");
                 }
             }
         }
@@ -585,7 +586,7 @@ class IdleRealTimeSurvival {
         if(this.gameState.isFloatingInWater) return;
         
         if (Math.round(this.gameState.raftIntegrity) >= 100) {
-            this.log("🚫 Non sprecare forze: la zattera è già perfettamente integra (100%).", "log-bad");
+            this.log("🚫 Non sprecare forze: la zattera è già perfectly integra (100%).", "log-bad");
             return;
         }
         if (this.gameState.repairsCount >= 5) {
