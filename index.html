@@ -149,11 +149,6 @@
             width: 100%;
             transition: width 0.5s ease;
         }
-        
-        .bar-fill.warning { 
-            background: #ef4444; 
-            animation: blink 1s infinite;
-        }
 
         /* Registro di Bordo */
         #log-panel {
@@ -263,7 +258,7 @@
 
     <!-- Diario di Bordo -->
     <div id="log-panel">
-        <div class="log-entry log-system">SISTEMA: Aggiornamento logica strutturale applicato. Attenzione alla 5ª riparazione!</div>
+        <div class="log-entry log-system">SISTEMA: Controllo risorse al 100% con Alert bloccante attivato correttamente.</div>
     </div>
 
     <!-- Pannello di Controllo Azioni -->
@@ -295,7 +290,7 @@ class IdleRealTimeSurvival {
             eventTimeLeft: 0,
             
             isFloatingInWater: false,
-            waterSurvivalTimeLeft: 300000 // 5 minuti reali (mezza giornata interna)
+            waterSurvivalTimeLeft: 300000 
         };
 
         this.weatherTypes = {
@@ -311,15 +306,15 @@ class IdleRealTimeSurvival {
         this.loopInterval = null;
 
         this.ticksPerDay = this.dayDuration / this.tickRate; 
-        this.standardDamagePerTick = 5 / this.ticksPerDay;  // 5% al giorno complessivo
-        this.stormDamagePerTick = 10 / this.ticksPerDay;    // 10% per ogni tempesta complessiva
+        this.standardDamagePerTick = 5 / this.ticksPerDay;  
+        this.stormDamagePerTick = 10 / this.ticksPerDay;    
     }
 
     init() {
         this.gameState.currentWeather = 'sereno';
         this.updateUI();
         this.loopInterval = setInterval(() => this.gameTick(), this.tickRate);
-        this.log("Risorse verificate. Il mare è calmo... per ora.", "log-system");
+        this.log("Risorse ed elenchi logici inizializzati.", "log-system");
     }
 
     log(message, type = '') {
@@ -359,31 +354,29 @@ class IdleRealTimeSurvival {
         if (this.gameState.foodLevel <= 0) this.gameState.health = Math.max(0, this.gameState.health - 0.4);
         if (this.gameState.waterLevel <= 0) this.gameState.health = Math.max(0, this.gameState.health - 0.8);
 
-        // --- GESTIONE DANNI ALLA ZATTERA ---
+        // Gestione danni zattera
         if (!this.gameState.isFloatingInWater) {
             let dmg = (this.gameState.currentWeather === 'tempesta') ? this.stormDamagePerTick : this.standardDamagePerTick;
             this.gameState.raftIntegrity = Math.max(0, this.gameState.raftIntegrity - dmg);
 
-            // NUOVA REGOLA: Se è stata fatta la 5ª riparazione (count == 5) e l'integrità scende al 10% o meno
             if (this.gameState.repairsCount >= 5 && this.gameState.raftIntegrity <= 10) {
                 this.gameState.raftIntegrity = 0;
                 this.gameState.isFloatingInWater = true;
-                this.log(`🚨 DISASTRO: La quinta riparazione non ha retto! La zattera è affondata sotto il 10%! Sei in acqua libera, hai mezza giornata per farti salvare!`, "log-bad");
+                this.log(`🚨 DISASTRO: La quinta riparazione non ha retto! La zattera è affondata sotto il 10%! Sei in acqua libera!`, "log-bad");
             } 
             else if (this.gameState.raftIntegrity <= 0) {
                 this.gameState.raftIntegrity = 0;
                 this.gameState.isFloatingInWater = true;
-                this.log(`🚨 COLLASSO: La zattera è andata distrutta. Sei finito in acqua!`, "log-bad");
+                this.log(`🚨 COLLASSO: La struttura ha ceduto. Sei finito in acqua!`, "log-bad");
             }
         } else {
-            // Logica galleggiamento a nuoto
             this.gameState.waterSurvivalTimeLeft -= this.tickRate;
             this.gameState.health = Math.max(0, this.gameState.health - 0.5); 
 
             if (this.gameState.waterSurvivalTimeLeft <= 0 || this.gameState.health <= 0) {
                 this.gameState.health = 0;
                 this.gameState.gameOver = true;
-                this.log(`💀 ANNEGAMENTO: Il tempo a galla è scaduto. Sei affogato nell'oceano indifeso.`, "log-bad");
+                this.log(`💀 ANNEGAMENTO: Sei affogato nell'oceano.`, "log-bad");
                 this.updateUI();
                 return;
             }
@@ -391,7 +384,7 @@ class IdleRealTimeSurvival {
 
         if (this.gameState.health <= 0) {
             this.gameState.gameOver = true;
-            this.log(`💀 MORTE: I tuoi parametri vitali si sono azzerati. GAME OVER.`, "log-bad");
+            this.log(`💀 MORTE: Parametri vitali azzerati. GAME OVER.`, "log-bad");
             this.updateUI();
             return;
         }
@@ -405,13 +398,12 @@ class IdleRealTimeSurvival {
             const nuovoMeteo = disponibili[Math.floor(Math.random() * disponibili.length)];
             
             if (vecchioMeteo !== nuovoMeteo) {
-                this.gameState.currentWeather = nuovoMeteo;
+                this.gameState.currentWeather = nuevoMeteo;
                 let nomeMeteo = (nuovoMeteo === 'sereno' && (this.gameState.phase === 'SERA' || this.gameState.phase === 'NOTTE')) ? this.weatherTypes[nuovoMeteo].nightName : this.weatherTypes[nuovoMeteo].name;
                 this.log(`☁️ METEO: Il cielo vira verso ${nomeMeteo}`, "log-system");
                 
                 if (nuovoMeteo === 'pioggia' && !this.gameState.isFloatingInWater) {
                     this.gameState.inventory.waterRations = Math.min(20, this.gameState.inventory.waterRations + 1);
-                    this.log("Acqua raccolta passivamente dalla pioggia (+1 Acqua).", "log-good");
                 }
             }
         }
@@ -419,7 +411,6 @@ class IdleRealTimeSurvival {
         if (this.gameState.activeRescueEvent) {
             this.gameState.eventTimeLeft -= this.tickRate;
             if (this.gameState.eventTimeLeft <= 0) {
-                this.log(`🚨 I soccorsi sono svaniti oltre l'orizzonte.`, "log-bad");
                 this.gameState.activeRescueEvent = null;
             }
         }
@@ -501,9 +492,11 @@ class IdleRealTimeSurvival {
         }
     }
 
+    // --- LOGICHE DI AZIONE CORRETTE CON ALERT BLOCANTE ---
     actionEat() {
-        if (this.gameState.foodLevel >= 100) {
-            this.log("🚫 ALERT: La tua pancia è già piena, non sprecare cibo prezioso!", "log-system");
+        if (Math.round(this.gameState.foodLevel) >= 100) {
+            this.log("🚫 ALERT: La tua pancia è già piena, non sprecare cibo prezioso!", "log-bad");
+            alert("La tua pancia è già piena! Non sprecare cibo prezioso.");
             return;
         }
         if (this.gameState.inventory.foodRations > 0) {
@@ -512,13 +505,14 @@ class IdleRealTimeSurvival {
             this.log("Consumata una razione di cibo.", "log-good");
             this.updateUI();
         } else {
-            this.log("Scorte di cibo terminate!", "log-bad");
+            this.log("Scorte di cibo teerminate!", "log-bad");
         }
     }
 
     actionDrink() {
-        if (this.gameState.waterLevel >= 100) {
-            this.log("🚫 ALERT: La tua pancia è già piena, non sprecare acqua preziosa!", "log-system");
+        if (Math.round(this.gameState.waterLevel) >= 100) {
+            this.log("🚫 ALERT: La tua pancia è già piena, non sprecare acqua preziosa!", "log-bad");
+            alert("La tua pancia è già piena! Non sprecare acqua preziosa.");
             return;
         }
         if (this.gameState.inventory.waterRations > 0) {
@@ -580,9 +574,8 @@ class IdleRealTimeSurvival {
         
         this.gameState.repairsCount++;
         this.gameState.raftIntegrity = Math.min(100, this.gameState.raftIntegrity + 25);
-        this.log(`🔧 Riparazione effettuata con successo (#${this.gameState.repairsCount}/5). Struttura rinforzata.`, "log-good");
+        this.log(`🔧 Riparazione effettuata con successo (#${this.gameState.repairsCount}/5).`, "log-good");
         
-        // MESSAGGIO DI AVVISO PER LA NUOVA REGOLA DELLA QUINTA RIPARAZIONE
         if(this.gameState.repairsCount === 5) {
             this.log(`⚠️ PERICOLO CRITICO: Hai raggiunto la quinta riparazione. Se l'integrità scende al 10% o meno, la zattera affonderà all'istante!`, "log-event");
         }
@@ -595,7 +588,6 @@ class IdleRealTimeSurvival {
             this.gameState.inventory.flares--;
             
             if (this.gameState.activeRescueEvent) {
-                this.log(`🔥 Razzo lanciato in direzione dei soccorsi!`, "log-event");
                 if (Math.random() < 0.85) {
                     this.log(`🎉 VITTORIA! Ti hanno visto! I soccorsi si avvicinano a prenderti. Diego Capani ti dichiara vincitore!`, "log-good");
                     this.gameState.gameOver = true;
