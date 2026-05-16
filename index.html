@@ -27,7 +27,7 @@
             width: 100%;
             max-width: 600px;
             background-color: #152e3d;
-            border: 3px solid #facc15; /* Il giallo iconico della zattera */
+            border: 3px solid #facc15;
             border-radius: 12px;
             padding: 20px;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
@@ -63,7 +63,6 @@
             width: 0%;
             height: 100%;
             background-color: #38bdf8;
-            /* Transizione lineare fluida ogni 10 secondi per non scattare */
             transition: width 10s linear; 
         }
 
@@ -191,14 +190,14 @@
         <div class="status-item">Salute: <span id="stat-health">100</span>%</div>
         <div class="status-item">Integrità Zattera: <span id="stat-raft">100</span>%</div>
         
-        <div class="status-item" style="grid-column: span 2; margin-top: 5px;">Idratazione (Consumo Passivo): <span id="stat-water-level">100</span>%</div>
+        <div class="status-item" style="grid-column: span 2; margin-top: 5px;">Idratazione: <span id="stat-water-level">100</span>%</div>
         <div class="bar-container"><div id="bar-water" class="bar-fill"></div></div>
 
-        <div class="status-item" style="grid-column: span 2;">Fame (Consumo Passivo): <span id="stat-food-level">100</span>%</div>
+        <div class="status-item" style="grid-column: span 2;">Fame: <span id="stat-food-level">100</span>%</div>
         <div class="bar-container"><div id="bar-food" class="bar-fill"></div></div>
 
         <div class="status-item" style="grid-column: span 2; color: #facc15; border-top: 1px solid #334155; padding-top: 10px; margin-top: 5px; font-size: 0.85rem;">
-            SCORTE CONSERVATE: <span id="inv-water">10</span> Acqua | <span id="inv-food">14</span> Cibo
+            SCORTE CONSERVATE: <span id="inv-water">10</span> / 20 Acqua | <span id="inv-food">14</span> Cibo
         </div>
         <div class="status-item" style="grid-column: span 2; color: #94a3b8; font-size: 0.75rem;">
             SEGNALAZIONE: Razzi di Soccorso rimasti (<span id="inv-flares">3</span>)
@@ -215,9 +214,9 @@
         <button onclick="game.actionEat()">Mangia Razione (-1 Cibo)</button>
         <button onclick="game.actionDrink()">Bevi Razione (-1 Acqua)</button>
         <button onclick="game.actionFish()">Cala la Lenza (Pesca)</button>
-        <button onclick="game.actionCollectWater()">Raccogli Piovana / Umidità</button>
+        <button onclick="game.actionCollectWater()">Raccogli Piovana</button>
         <button onclick="game.actionUseKit()">Rattoppa Zattera</button>
-        <button onclick="game.actionSignal()">Spara Razzo di Segnalazione</button>
+        <button onclick="game.actionSignal()">Spara Razzo</button>
     </div>
 </div>
 
@@ -301,7 +300,7 @@ class IdleRealTimeSurvival {
         this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - (weather.foodBurn + timeStress));
         this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - (weather.waterBurn + timeStress));
 
-        // Penalità alla salute in caso di bisogni a zero
+        // Penalità alla salute in caso di bisogni a zero alla fine del ciclo temporale
         if (this.gameState.foodLevel === 0) this.gameState.health -= 12;
         if (this.gameState.waterLevel === 0) this.gameState.health -= 20;
 
@@ -324,7 +323,7 @@ class IdleRealTimeSurvival {
         this.log(`I consumi passivi dell'ora trascorsa hanno intaccato le tue risorse.`, "log-bad");
 
         if (this.gameState.currentWeather === 'pioggia') {
-            this.gameState.inventory.waterRations += 1;
+            this.gameState.inventory.waterRations = Math.min(20, this.gameState.inventory.waterRations + 1);
             this.log("Bonus: La pioggia dell'ora passata ha accumulato +1 Acqua automaticamente.", "log-good");
         }
 
@@ -368,12 +367,31 @@ class IdleRealTimeSurvival {
         }
     }
 
-    // --- LOGICA DELLE AZIONI DISPONIBILI DURANTE L'ORA ---
+    // --- CONTROLLO DELLO SFINIMENTO FISICO ISTANTANEO ---
+    checkInstantDeath() {
+        // Se sforzandoti mandi a zero le statistiche, perdi salute immediatamente ad ogni azione
+        if (this.gameState.foodLevel === 0) this.gameState.health = Math.max(0, this.gameState.health - 5);
+        if (this.gameState.waterLevel === 0) this.gameState.health = Math.max(0, this.gameState.health - 8);
+        
+        if (this.gameState.health <= 0) {
+            this.gameState.health = 0;
+            this.gameState.gameOver = true;
+            this.log("⚠️ SEI MORTO DI SFINIMENTO. Il tuo corpo è collassato per l'eccessivo sforzo fisico.", "log-bad");
+        }
+    }
+
+    // --- LOGICA DELLE AZIONI DISPONIBILI ---
     actionEat() {
+        // Controllo preventivo di stomaco pieno
+        if (this.gameState.foodLevel >= 100) {
+            this.log("Sei già a stomaco pieno! Non ha senso sprecare cibo ora.", "log-system");
+            return;
+        }
+
         if (this.gameState.inventory.foodRations > 0) {
             this.gameState.inventory.foodRations--;
             this.gameState.foodLevel = Math.min(100, this.gameState.foodLevel + 35);
-            this.log("Hai aperto e consumato una razione di cibo.", "log-good");
+            this.log("Hai mangiato una razione di cibo. Ti senti più forte.", "log-good");
             this.updateUI();
         } else {
             this.log("Scorte di cibo esaurite!", "log-bad");
@@ -381,6 +399,12 @@ class IdleRealTimeSurvival {
     }
 
     actionDrink() {
+        // Controllo preventivo di totale idratazione
+        if (this.gameState.waterLevel >= 100) {
+            this.log("Non hai più sete, sei completamente idratato. Non sprecare acqua!", "log-system");
+            return;
+        }
+
         if (this.gameState.inventory.waterRations > 0) {
             this.gameState.inventory.waterRations--;
             this.gameState.waterLevel = Math.min(100, this.gameState.waterLevel + 40);
@@ -392,30 +416,60 @@ class IdleRealTimeSurvival {
     }
 
     actionFish() {
+        // Pescare costa fatica istantanea
+        this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 4);
+        this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 2);
+        
         const weather = this.weatherTypes[this.gameState.currentWeather];
         if (Math.random() < weather.fishChance) {
             this.gameState.inventory.foodRations++;
-            this.log("🎣 Successo! Hai recuperato un pesce dalle correnti. +1 Scorta Cibo.", "log-good");
+            this.log("🎣 Successo! Hai recuperato un pesce. Ma che fatica... (-4% Fame, -2% Sete).", "log-good");
         } else {
-            this.log("Hai ritirato la lenza ma l'esca è intatta. Nessun pesce qui.", "log-bad");
+            this.log("La lenza è tornata vuota. Hai sprecato energie preziose (-4% Fame, -2% Sete).", "log-bad");
         }
+        
+        this.checkInstantDeath();
         this.updateUI();
     }
 
     actionCollectWater() {
+        // Controllo preventivo dello spazio nei contenitori (Max 20 Razioni)
+        if (this.gameState.inventory.waterRations >= 20) {
+            this.log("I tuoi contenitori sono stracolmi! Non puoi accumulare altra acqua.", "log-system");
+            return;
+        }
+
+        // L'azione ha un costo in energie solo se viene eseguita realmente
+        this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 2);
+        this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 3);
+
         const weather = this.weatherTypes[this.gameState.currentWeather];
         if (Math.random() < weather.rainChance) {
             this.gameState.inventory.waterRations++;
-            this.log("💧 Il collettore ha accumulato umidità o pioggia utile. +1 Scorta Acqua.", "log-good");
+            this.log("💧 Successo! Il collettore ha preso acqua utile (-2% Fame, -3% Sete).", "log-good");
         } else {
-            this.log("Il clima attuale non permette la condensazione o la raccolta d'acqua.", "log-bad");
+            this.log("La raccolta è fallita. C'è troppa poca umidità nell'aria (-2% Fame, -3% Sete).", "log-bad");
         }
+        
+        this.checkInstantDeath();
         this.updateUI();
     }
 
     actionUseKit() {
+        // Controllo preventivo dello stato della zattera
+        if (this.gameState.raftIntegrity >= 100) {
+            this.log("La zattera è già in condizioni perfette! Inutile lavorare ora.", "log-system");
+            return;
+        }
+
+        // L'azione procede solo se c'è un danno reale
+        this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 6);
+        this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 6);
+        
         this.gameState.raftIntegrity = Math.min(100, this.gameState.raftIntegrity + 20);
-        this.log("🔧 Hai usato resina e toppe per rigonfiare e stabilizzare la zattera.", "log-good");
+        this.log("🔧 Zattera rattoppata con successo! Lavoro pesante (-6% Fame, -6% Sete).", "log-good");
+        
+        this.checkInstantDeath();
         this.updateUI();
     }
 
@@ -423,13 +477,13 @@ class IdleRealTimeSurvival {
         if (this.gameState.inventory.flares > 0) {
             this.gameState.inventory.flares--;
             const weather = this.weatherTypes[this.gameState.currentWeather];
-            this.log(`Hai sparato un razzo. Con questo meteo (${weather.name}) le probabilità di avvistamento sono del ${Math.floor(weather.flareSuccess * 100)}%.`, "log-system");
+            this.log(`Hai sparato un razzo. Con questo meteo le probabilità di avvistamento sono del ${Math.floor(weather.flareSuccess * 100)}%.`, "log-system");
             
             if (Math.random() < weather.flareSuccess) {
-                this.log(`🎉 INCREDIBILE! Un mercantile ti ha individuato! Ti vengono incontro. SEI SALVO al Giorno ${this.gameState.day}!`, "log-good");
+                this.log(`🎉 INCREDIBILE! Un mercantile ti ha individuato! SEI SALVO al Giorno ${this.gameState.day}!`, "log-good");
                 this.gameState.gameOver = true;
             } else {
-                this.log("Il razzo ha illuminato il mare ma si è spento senza risposte all'orizzonte.", "log-bad");
+                this.log("Il razzo si è spento nel cielo plumbeo senza risposte.", "log-bad");
             }
             this.updateUI();
         } else {
@@ -438,7 +492,7 @@ class IdleRealTimeSurvival {
     }
 }
 
-// Inizializzazione motore di gioco
+// Inizializzazione motore di gioco al caricamento della pagina
 const game = new IdleRealTimeSurvival();
 window.onload = () => game.init();
 </script>
