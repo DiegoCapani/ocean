@@ -252,7 +252,7 @@
 
     <!-- Diario di Bordo -->
     <div id="log-panel">
-        <div class="log-entry log-system">SISTEMA: Meccanica di raccolta idrica differenziata (Piovana/Condensa) attiva.</div>
+        <div class="log-entry log-system">SISTEMA: Fix logico applicato. Il distillatore solare richiede luce diurna. Di notte si usa il telo per la condensa.</div>
     </div>
 
     <!-- Pannello di Controllo Azioni -->
@@ -529,7 +529,7 @@ class IdleRealTimeSurvival {
         this.updateUI();
     }
 
-    // --- NUOVA LOGICA: MECCANICA DI RACCOLTA ACQUA PIOVANA VS CONDENSA ---
+    // --- LOGICA AGGIORNATA: RACCOLTA DIFFERENZIATA GIORNO/NOTTE/METEO ---
     actionCollectWater() {
         if(this.gameState.isFloatingInWater) return;
         if (this.gameState.inventory.waterRations >= 20) {
@@ -538,35 +538,44 @@ class IdleRealTimeSurvival {
         }
 
         const meteoCorrente = this.gameState.currentWeather;
+        const faseCorrente = this.gameState.phase;
 
-        // Caso 1: Meteo con pioggia (Raccolta Piovana)
+        // Caso 1: Sta piovendo (Giorno o Notte indifferente) -> Raccogli acqua piovana
         if (meteoCorrente === 'pioggia' || meteoCorrente === 'tempesta') {
-            // Consumo energetico ridotto al minimo
             this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 1);
             this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 1);
 
-            // Probabilità di successo molto alta
             let chancePiovana = (meteoCorrente === 'tempesta') ? 0.90 : 0.80;
 
             if (Math.random() < chancePiovana) {
                 this.gameState.inventory.waterRations++;
-                this.log("💧 Raccolta ACQUA PIOVANA riuscita! I teli sono bagnati.", "log-good");
+                this.log("💧 Raccolta ACQUA PIOVANA riuscita! I teli si sono riempiti rapidamente.", "log-good");
             } else {
-                this.log("Il forte vento ha rovesciato la bacinella d'acqua piovana.", "log-system");
+                this.log("Il forte vento flessibile ha rovesciato i contenitori di acqua piovana.", "log-system");
             }
         } 
-        // Caso 2: Meteo secco/sereno (Raccolta da Condensa)
+        // Caso 2: Non piove -> Dipende dall'orario (Giorno vs Notte)
         else {
-            // Consumo energetico maggiore per via del lavoro manuale/distillatore
+            // Consumo fisso di risorse per l'azione di raccolta/allestimento
             this.gameState.foodLevel = Math.max(0, this.gameState.foodLevel - 4);
             this.gameState.waterLevel = Math.max(0, this.gameState.waterLevel - 4);
 
-            // Probabilità di successo inferiore rispetto alla pioggia reale
-            if (Math.random() < 0.35) {
-                this.gameState.inventory.waterRations++;
-                this.log("🧪 Raccolta ACQUA DA CONDENSA riuscita tramite il distillatore solare.", "log-good");
+            if (faseCorrente === 'SERA' || faseCorrente === 'NOTTE') {
+                // DI NOTTE: Raccolta umidità con il telo
+                if (Math.random() < 0.20) { // Probabilità inferiore alla pioggia e al distillatore diurno
+                    this.gameState.inventory.waterRations++;
+                    this.log("🌙 Raccolta CONDENSA NOTTURNA riuscita stendendo il telo sulla struttura.", "log-good");
+                } else {
+                    this.log("Tentativo notturno a vuoto: l'escursione termica non ha generato abbastanza rugiada sul telo.", "log-system");
+                }
             } else {
-                this.log("Tentativo a vuoto, l'umidità dell'aria è troppo bassa per creare condensa.", "log-system");
+                // DI GIORNO: Funziona il distillatore solare
+                if (Math.random() < 0.35) {
+                    this.gameState.inventory.waterRations++;
+                    this.log("🧪 DISTILLATORE SOLARE funzionante! Il calore diurno ha evaporato l'acqua marina.", "log-good");
+                } else {
+                    this.log("Il distillatore solare ha prodotto troppo poco, l'umidità è evaporata nell'aria.", "log-system");
+                }
             }
         }
         this.updateUI();
